@@ -5,7 +5,8 @@ import { verifyToken } from '../utils/auth.js';
 const authenticate = async (req, res, next) => {
   try {
     const header = req.headers.authorization || '';
-    const token = header.startsWith('Bearer ') ? header.slice(7) : '';
+    const cookieToken = (req.headers.cookie || '').split(';').map((part) => part.trim()).find((part) => part.startsWith('authToken='))?.slice('authToken='.length) || '';
+    const token = header.startsWith('Bearer ') ? header.slice(7) : cookieToken;
     const payload = verifyToken(token);
     if (!payload) throw new ApiError(401, 'Authentication required');
     const user = await User.findById(payload.sub);

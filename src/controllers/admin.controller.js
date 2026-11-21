@@ -3,7 +3,6 @@ import User from '../models/User.js';
 import ApiError from '../utils/ApiError.js';
 import { hashPassword, verifyPassword, signToken } from '../utils/auth.js';
 import { isValidEmail, isValidName, isValidPassword, isValidPhone } from '../utils/validation.js';
-import PasswordResetOtp from '../models/PasswordResetOtp.js';
 import { assertEmailConfigured, sendAccountCredentialsEmail, sendPasswordResetOtpEmail } from '../services/email.service.js';
 import logger from '../utils/logger.js';
 
@@ -19,6 +18,14 @@ const resetCookieOptions = {
   sameSite: 'strict',
   path: resetCookiePath,
   maxAge: otpLifetimeMs,
+};
+const authCookieName = 'authToken';
+const authCookieOptions = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: 'strict',
+  path: '/',
+  maxAge: 12 * 60 * 60 * 1000,
 };
 const otpHash = (userId, otp) => createHmac('sha256', process.env.JWT_SECRET || 'development-only-change-this-secret')
   .update(`${userId}:${otp}`)
@@ -38,7 +45,8 @@ const bootstrap = async (req, res) => {
   if (!isValidEmail(email)) throw new ApiError(400, 'A valid email address is required');
   if (!isValidPassword(password)) throw new ApiError(400, 'Password must be at least 6 characters and include uppercase, lowercase, number, and special character');
   const user = await User.create({ name: name.trim(), email: email.trim().toLowerCase(), passwordHash: await hashPassword(password), role: 'super_admin' });
-  res.status(201).json({ success: true, data: publicUser(user), token: signToken(user) });
+  res.cookie(authCookieName, signToken(user), authCookieOptions);
+  res.status(201).json({ success: true, data: publicUser(user) });
 };
 
 const login = async (req, res) => {
@@ -46,13 +54,17 @@ const login = async (req, res) => {
   if (!email || !password) throw new ApiError(400, 'email and password are required');
   const user = await User.findOne({ email: String(email).toLowerCase().trim() }).select('+passwordHash');
   if (!user || !user.active || !(await verifyPassword(password, user.passwordHash))) throw new ApiError(401, 'Invalid email or password');
-  res.json({ success: true, data: publicUser(user), token: signToken(user) });
+  res.cookie(authCookieName, signToken(user), authCookieOptions);
+  res.json({ success: true, data: publicUser(user) });
 };
 
 const me = async (req, res) => res.json({ success: true, data: publicUser(req.user) });
 
 const logout = async (req, res) => {
   await User.updateOne({ _id: req.user._id }, { $inc: { tokenVersion: 1 } });
+  const clearOptions = { ...authCookieOptions };
+  delete clearOptions.maxAge;
+  res.clearCookie(authCookieName, clearOptions);
   res.json({ success: true, message: 'Logged out successfully. All active tokens for this account have been revoked.' });
 };
 
@@ -71,7 +83,7 @@ const list = async (req, res) => {
 };
 
 const create = async (req, res) => {
-  const { name, email, password, phone, role, depotIds } = req.body;
+  const { name, email, password, phone, role, depotIds, sendEmail = true } = req.body;
   if (!isValidName(name)) throw new ApiError(400, 'Name must be between 6 and 20 characters');
   if (!isValidEmail(email)) throw new ApiError(400, 'A valid email address is required');
   if (!isValidPassword(password)) throw new ApiError(400, 'Password must be at least 6 characters and include uppercase, lowercase, number, and special character');
@@ -85,21 +97,27 @@ const create = async (req, res) => {
   if (!validRoles.includes(role) || (role === 'super_admin' && req.user.role !== 'super_admin')) throw new ApiError(400, 'Invalid role');
   if (role === 'admin' && req.user.role === 'admin' && assignedDepotIds.some((id) => !isDepotAllowed(req.user, id))) throw new ApiError(403, 'Cannot assign an unassigned depot');
   if (role === 'super_admin') throw new ApiError(400, 'Super admin accounts cannot be created through this endpoint');
-  assertEmailConfigured();
+  if (typeof sendEmail !== 'boolean') throw new ApiError(400, 'sendEmail must be a boolean');
+  if (sendEmail) assertEmailConfigured();
   const user = await User.create({ name: name.trim(), email: email.trim().toLowerCase(), phone: phone?.trim() || '', passwordHash: await hashPassword(password), role, depotIds: assignedDepotIds });
-  try {
-    await sendAccountCredentialsEmail({ to: user.email, name: user.name, password });
-  } catch (error) {
-    await User.deleteOne({ _id: user._id });
-    logger.error('Account credentials email delivery failed', {
-      code: error.code,
-      command: error.command,
-      responseCode: error.responseCode,
-      message: error.message,
+  res.status(201).json({
+    success: true,
+    data: publicUser(user),
+    message: sendEmail ? 'Account created. Credentials email is being sent.' : 'Account created. No email was sent.',
+  });
+  if (sendEmail) {
+    setImmediate(() => {
+      sendAccountCredentialsEmail({ to: user.email, name: user.name, password }).catch((error) => {
+        logger.error('Account credentials email delivery failed', {
+          code: error.code,
+          command: error.command,
+          responseCode: error.responseCode,
+          smtpMessage: error.message,
+          userId: user._id.toString(),
+        });
+      });
     });
-    throw new ApiError(502, 'Unable to send the account login details. Check the email service configuration.');
   }
-  res.status(201).json({ success: true, data: publicUser(user), message: 'Account created. Login details were emailed to the user.' });
 };
 
 const requestPasswordResetOtp = async (req, res) => {
@@ -112,7 +130,7 @@ const requestPasswordResetOtp = async (req, res) => {
   if (!user.active) throw new ApiError(403, 'This account is inactive. Please contact your administrator.');
 
   const now = new Date();
-  const existingOtp = await PasswordResetOtp.findOne({ userId: user._id });
+  const existingOtp = user.passwordResetOtp;
   if (existingOtp && now - existingOtp.lastSentAt < otpCooldownMs) {
     return res.json({ success: true, message: 'A reset code was recently sent to your email. Please check your inbox.' });
   }
@@ -122,16 +140,13 @@ const requestPasswordResetOtp = async (req, res) => {
   res.cookie(resetCookieName, temporaryToken, resetCookieOptions);
   const otp = randomInt(0, 1_000_000).toString().padStart(6, '0');
   const codeHash = otpHash(user._id, otp);
-  await PasswordResetOtp.findOneAndUpdate(
-    { userId: user._id },
-    { userId: user._id, codeHash, tempTokenHash, attempts: 0, lastSentAt: now, expiresAt: new Date(now.getTime() + otpLifetimeMs) },
-    { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true },
-  );
+  user.passwordResetOtp = { codeHash, tempTokenHash, attempts: 0, lastSentAt: now, expiresAt: new Date(now.getTime() + otpLifetimeMs) };
+  await user.save();
   try {
     assertEmailConfigured();
     await sendPasswordResetOtpEmail({ to: user.email, name: user.name, otp });
   } catch (error) {
-    await PasswordResetOtp.deleteOne({ userId: user._id, codeHash });
+    await User.updateOne({ _id: user._id, 'passwordResetOtp.codeHash': codeHash }, { $unset: { passwordResetOtp: 1 } });
     logger.error('Password reset OTP email delivery failed', {
       code: error.code,
       command: error.command,
@@ -151,25 +166,20 @@ const resetPasswordWithOtp = async (req, res) => {
   const temporaryToken = getCookie(req, resetCookieName);
   if (!temporaryToken) throw new ApiError(400, 'Password reset session is missing or has expired');
   const tempTokenHash = createHash('sha256').update(temporaryToken).digest('hex');
-  const resetOtp = await PasswordResetOtp.findOne({ tempTokenHash, expiresAt: { $gt: new Date() }, attempts: { $lt: otpMaxAttempts } });
-  if (!resetOtp) throw new ApiError(400, 'Reset code is invalid or has expired');
-  const submittedHash = otpHash(resetOtp.userId, otp);
+  const user = await User.findOne({ 'passwordResetOtp.tempTokenHash': tempTokenHash, 'passwordResetOtp.expiresAt': { $gt: new Date() }, 'passwordResetOtp.attempts': { $lt: otpMaxAttempts }, active: true, role: { $in: ['admin', 'super_admin'] } });
+  const resetOtp = user?.passwordResetOtp;
+  if (!user || !resetOtp) throw new ApiError(400, 'Reset code is invalid or has expired');
+  const submittedHash = otpHash(user._id, otp);
   const submittedBuffer = Buffer.from(submittedHash, 'hex');
   const storedBuffer = Buffer.from(resetOtp.codeHash, 'hex');
   if (submittedBuffer.length !== storedBuffer.length || !timingSafeEqual(submittedBuffer, storedBuffer)) {
-    await PasswordResetOtp.updateOne({ _id: resetOtp._id }, { $inc: { attempts: 1 } });
-    if (resetOtp.attempts + 1 >= otpMaxAttempts) await PasswordResetOtp.deleteOne({ _id: resetOtp._id });
+    if (resetOtp.attempts + 1 >= otpMaxAttempts) user.passwordResetOtp = undefined;
+    else user.passwordResetOtp.attempts += 1;
+    await user.save();
     throw new ApiError(400, 'Reset code is invalid or has expired');
   }
-  const consumedOtp = await PasswordResetOtp.findOneAndDelete({
-    _id: resetOtp._id,
-    codeHash: submittedHash,
-    expiresAt: { $gt: new Date() },
-    attempts: { $lt: otpMaxAttempts },
-  });
-  if (!consumedOtp) throw new ApiError(400, 'Reset code is invalid or has expired');
-  const user = await User.findOne({ _id: resetOtp.userId, active: true, role: { $in: ['admin', 'super_admin'] } });
-  if (!user) throw new ApiError(400, 'Reset code is invalid or has expired');
+  if (resetOtp.codeHash !== submittedHash || resetOtp.expiresAt <= new Date() || resetOtp.attempts >= otpMaxAttempts) throw new ApiError(400, 'Reset code is invalid or has expired');
+  user.passwordResetOtp = undefined;
   user.passwordHash = await hashPassword(newPassword);
   user.tokenVersion += 1;
   await user.save();
@@ -194,7 +204,8 @@ const setOperatorPassword = async (req, res) => {
   user.passwordHash = await hashPassword(password);
   user.tokenVersion += 1;
   await user.save();
-  await PasswordResetOtp.deleteOne({ userId: user._id });
+  user.passwordResetOtp = undefined;
+  await user.save();
   try {
     await sendAccountCredentialsEmail({
       to: user.email,
@@ -239,7 +250,8 @@ const update = async (req, res) => {
   if (active !== undefined) target.active = active;
   await target.save();
   if (active === false || role !== undefined) {
-    await PasswordResetOtp.deleteOne({ userId: target._id });
+    target.passwordResetOtp = undefined;
+    await target.save();
   }
   res.json({ success: true, data: publicUser(target) });
 };
@@ -250,7 +262,6 @@ const remove = async (req, res) => {
   if (target._id.equals(req.user._id)) throw new ApiError(400, 'Cannot delete your own account');
   if (req.user.role === 'admin' && (target.role === 'super_admin' || !hasDepotAccess(req.user, target.depotIds))) throw new ApiError(403, 'Cannot manage this user');
   if (target.role === 'super_admin' && await User.countDocuments({ role: 'super_admin', active: true }) <= 1) throw new ApiError(400, 'Cannot delete the last active super admin');
-  await PasswordResetOtp.deleteOne({ userId: target._id });
   await target.deleteOne();
   res.json({ success: true, message: 'User deleted' });
 };

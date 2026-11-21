@@ -9,6 +9,13 @@ const userSchema = new mongoose.Schema({
   depotIds: [{ type: String, trim: true }],
   tokenVersion: { type: Number, default: 0 },
   active: { type: Boolean, default: true },
+  passwordResetOtp: {
+    codeHash: { type: String, default: '' },
+    tempTokenHash: { type: String, default: '' },
+    attempts: { type: Number, default: 0 },
+    lastSentAt: { type: Date },
+    expiresAt: { type: Date },
+  },
 }, { timestamps: true });
 
 const User = mongoose.model('User', userSchema);

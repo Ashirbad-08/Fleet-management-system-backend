@@ -2,14 +2,25 @@
   "info": {
     "_postman_id": "7f4306ac-b8e1-4cf0-a670-8a9a54ca0e21",
     "name": "Fleet Management API",
-    "description": "API testing collection for health, authentication, permissions, and admin account management. Set setupKey only for first-time bootstrap. Bootstrap and login requests save the returned bearer token automatically.",
+    "description": "API testing collection for health, authentication, permissions, and admin account management. Set setupKey only for first-time bootstrap. Login and bootstrap store the authentication cookie automatically in Postman.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
-    { "key": "baseUrl", "value": "http://localhost:5000", "type": "string" },
-    { "key": "setupKey", "value": "", "type": "string" },
-    { "key": "token", "value": "", "type": "string" },
-    { "key": "userId", "value": "", "type": "string" }
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000",
+      "type": "string"
+    },
+    {
+      "key": "setupKey",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "userId",
+      "value": "",
+      "type": "string"
+    }
   ],
   "item": [
     {
@@ -17,7 +28,12 @@
       "item": [
         {
           "name": "Health check",
-          "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/health", "description": "Returns server and MongoDB status." }
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/health",
+            "description": "Returns server and MongoDB status."
+          }
         }
       ]
     },
@@ -29,31 +45,97 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "x-setup-key", "value": "{{setupKey}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-setup-key",
+                "value": "{{setupKey}}"
+              }
             ],
-            "body": { "mode": "raw", "raw": "{\n  \"name\": \"API Super Admin\",\n  \"email\": \"superadmin@example.com\",\n  \"password\": \"ChangeThisPassword123!\"\n}", "options": { "raw": { "language": "json" } } },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"API Super Admin\",\n  \"email\": \"superadmin@example.com\",\n  \"password\": \"ChangeThisPassword123!\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
             "url": "{{baseUrl}}/api/auth/bootstrap-super-admin",
             "description": "Requires SUPER_ADMIN_SETUP_KEY configured on the server. Can only succeed before a super admin exists. Change the sample password before use."
           },
-          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["if (pm.response.code === 201) {", "  const body = pm.response.json();", "  if (body.token) pm.collectionVariables.set('token', body.token);", "  if (body.data && body.data.id) pm.collectionVariables.set('userId', body.data.id);", "}"] } }]
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const body = pm.response.json();",
+                  "  if (body.data && body.data.id) pm.collectionVariables.set('userId', body.data.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "Login",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"email\": \"superadmin@example.com\",\n  \"password\": \"ChangeThisPassword123!\"\n}", "options": { "raw": { "language": "json" } } },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"superadmin@example.com\",\n  \"password\": \"ChangeThisPassword123!\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
             "url": "{{baseUrl}}/api/auth/login"
           },
-          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["if (pm.response.code === 200) {", "  const body = pm.response.json();", "  if (body.token) pm.collectionVariables.set('token', body.token);", "  if (body.data && body.data.id) pm.collectionVariables.set('userId', body.data.id);", "}"] } }]
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const body = pm.response.json();",
+                  "  if (body.data && body.data.id) pm.collectionVariables.set('userId', body.data.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "Request admin/superadmin password reset code",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"email\": \"superadmin@example.com\"\n}", "options": { "raw": { "language": "json" } } },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"superadmin@example.com\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
             "url": "{{baseUrl}}/api/auth/forgot-password",
             "description": "Sends a 6-digit, 10-minute OTP to an active admin or superadmin account. Operators are told to contact an admin; unregistered addresses return Invalid email. OTP requests are limited to one per account per minute."
           }
@@ -62,25 +144,51 @@
           "name": "Reset admin/superadmin password with OTP",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"otp\": \"123456\",\n  \"newPassword\": \"NewSecurePassword123!\",\n  \"confirmPassword\": \"NewSecurePassword123!\"\n}", "options": { "raw": { "language": "json" } } },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"otp\": \"123456\",\n  \"newPassword\": \"NewSecurePassword123!\",\n  \"confirmPassword\": \"NewSecurePassword123!\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
             "url": "{{baseUrl}}/api/auth/reset-password-otp",
             "description": "Replace the sample OTP with the code received by email. Postman stores and sends the HttpOnly reset-session cookie from the preceding request. A successful reset revokes existing sessions."
           }
         },
         {
           "name": "Get current account",
-          "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/api/auth/me" }
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/auth/me",
+            "description": "Authenticates with the authToken cookie saved by Postman after login."
+          }
         },
         {
           "name": "Logout (revoke account tokens)",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "header": [],
             "url": "{{baseUrl}}/api/auth/logout",
-            "description": "Revokes all active bearer tokens for this account. Sign in again to continue testing authenticated requests."
+            "description": "Revokes all active bearer tokens for this account. Sign in again to continue testing authenticated requests. Authenticates with the authToken cookie saved by Postman after login."
           },
-          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["if (pm.response.code === 200) pm.collectionVariables.unset('token');"] } }]
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": []
+              }
+            }
+          ]
         }
       ]
     },
@@ -89,7 +197,12 @@
       "item": [
         {
           "name": "Get my permissions",
-          "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/api/permissions/me" }
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/permissions/me",
+            "description": "Authenticates with the authToken cookie saved by Postman after login."
+          }
         }
       ]
     },
@@ -98,40 +211,103 @@
       "item": [
         {
           "name": "List accounts",
-          "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/api/admins" }
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/admins",
+            "description": "Authenticates with the authToken cookie saved by Postman after login."
+          }
         },
         {
           "name": "Create operator account",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }],
-            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Test Operator\",\n  \"email\": \"operator@example.com\",\n  \"phone\": \"+15551234567\",\n  \"password\": \"OperatorPassword123!\",\n  \"role\": \"operator\",\n  \"depotIds\": [\"depot-1\"]\n}", "options": { "raw": { "language": "json" } } },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Test Operator\",\n  \"email\": \"operator@example.com\",\n  \"phone\": \"+15551234567\",\n  \"password\": \"OperatorPassword123!\",\n  \"role\": \"operator\",\n  \"depotIds\": [\n    \"depot-1\"\n  ],\n  \"sendEmail\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
             "url": "{{baseUrl}}/api/admins",
-            "description": "Superadmin or admin creates an operator and emails the supplied password and website link. Configure SMTP and APP_URL first. Use a unique email for each run."
+            "description": "Creates an operator. Set sendEmail to true to email the login details; false skips email delivery."
           },
-          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["if (pm.response.code === 201) {", "  const body = pm.response.json();", "  if (body.data && body.data.id) pm.collectionVariables.set('userId', body.data.id);", "}"] } }]
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const body = pm.response.json();",
+                  "  if (body.data && body.data.id) pm.collectionVariables.set('userId', body.data.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "Update account",
           "request": {
             "method": "PATCH",
-            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }],
-            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Updated Test Operator\",\n  \"phone\": \"+15559876543\",\n  \"role\": \"operator\",\n  \"depotIds\": [\"depot-1\"],\n  \"active\": true\n}", "options": { "raw": { "language": "json" } } },
-            "url": "{{baseUrl}}/api/admins/{{userId}}"
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Test Operator\",\n  \"phone\": \"+15559876543\",\n  \"role\": \"operator\",\n  \"depotIds\": [\"depot-1\"],\n  \"active\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/admins/{{userId}}",
+            "description": "Authenticates with the authToken cookie saved by Postman after login."
           }
         },
         {
           "name": "Delete account",
-          "request": { "method": "DELETE", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/api/admins/{{userId}}", "description": "Superadmin can delete any account. Admins can delete users within their depot access. Cannot delete your own account." }
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{baseUrl}}/api/admins/{{userId}}",
+            "description": "Superadmin can delete any account. Admins can delete users within their depot access. Cannot delete your own account. Authenticates with the authToken cookie saved by Postman after login."
+          }
         },
         {
           "name": "Set operator password and email it",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{token}}" }],
-            "body": { "mode": "raw", "raw": "{\n  \"password\": \"NewOperatorPassword123!\",\n  \"confirmPassword\": \"NewOperatorPassword123!\"\n}", "options": { "raw": { "language": "json" } } },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"password\": \"NewOperatorPassword123!\",\n  \"confirmPassword\": \"NewOperatorPassword123!\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
             "url": "{{baseUrl}}/api/admins/{{userId}}/password-reset",
-            "description": "Superadmin or an admin with depot access can set a password for an operator. New credentials are emailed to the operator."
+            "description": "Superadmin or an admin with depot access can set a password for an operator. New credentials are emailed to the operator. Authenticates with the authToken cookie saved by Postman after login."
           }
         }
       ]

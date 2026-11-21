@@ -13,6 +13,7 @@ const options = {
     components: {
       securitySchemes: {
         bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
+        cookieAuth: { type: 'apiKey', in: 'cookie', name: 'authToken' },
       },
       schemas: {
         Account: {
@@ -26,7 +27,7 @@ const options = {
         AuthResponse: {
           type: 'object',
           properties: {
-            success: { type: 'boolean' }, data: { $ref: '#/components/schemas/Account' }, token: { type: 'string' },
+            success: { type: 'boolean' }, data: { $ref: '#/components/schemas/Account' },
           },
         },
         AccountInput: {

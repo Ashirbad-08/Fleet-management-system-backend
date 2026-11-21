@@ -30,7 +30,7 @@ const adminRouter = express.Router();
  *               password: { type: string, minLength: 6, description: Must include uppercase, lowercase, number, and special character }
  *     responses:
  *       201:
- *         description: Super admin created; response includes a bearer token
+ *         description: Super admin created; an HttpOnly authentication cookie is set
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/AuthResponse' }
@@ -57,7 +57,7 @@ router.post('/auth/bootstrap-super-admin', asyncHandler(controller.bootstrap));
  *               password: { type: string }
  *     responses:
  *       200:
- *         description: Signed in
+ *         description: Signed in; an HttpOnly authentication cookie is set
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/AuthResponse' }
@@ -117,7 +117,7 @@ router.post('/auth/reset-password-otp', asyncHandler(controller.resetPasswordWit
  *   get:
  *     summary: Get the current account
  *     tags: [Authentication]
- *     security: [{ bearerAuth: [] }]
+ *     security: [{ bearerAuth: [] }, { cookieAuth: [] }]
  *     responses:
  *       200:
  *         description: Current account
@@ -137,9 +137,9 @@ router.get('/auth/me', authenticate, asyncHandler(controller.me));
  * /api/auth/logout:
  *   post:
  *     summary: Log out the current account
- *     description: Revokes all active bearer tokens for the authenticated account. Sign in again to get a new token.
+ *     description: Revokes all active tokens for the authenticated account and clears the authentication cookie. Sign in again to start a new session.
  *     tags: [Authentication]
- *     security: [{ bearerAuth: [] }]
+ *     security: [{ bearerAuth: [] }, { cookieAuth: [] }]
  *     responses:
  *       200: { description: Tokens revoked }
  *       401: { description: Authentication required }
@@ -155,7 +155,7 @@ adminRouter.use(authenticate);
  *     summary: Set a new operator password
  *     description: Admins and superadmins can set an operator password. The new credentials are emailed to the operator and active sessions are revoked.
  *     tags: [Administration]
- *     security: [{ bearerAuth: [] }]
+ *     security: [{ bearerAuth: [] }, { cookieAuth: [] }]
  *     parameters:
  *       - in: path
  *         name: id
@@ -185,7 +185,7 @@ adminRouter.get('/', allowRoles('super_admin', 'admin'), asyncHandler(controller
  *     summary: Create an admin or operator account
  *     description: Emails the supplied password and APP_URL website link to the new user's email address.
  *     tags: [Administration]
- *     security: [{ bearerAuth: [] }]
+ *     security: [{ bearerAuth: [] }, { cookieAuth: [] }]
  *     requestBody:
  *       required: true
  *       content:
@@ -200,10 +200,11 @@ adminRouter.get('/', allowRoles('super_admin', 'admin'), asyncHandler(controller
  *               password: { type: string, minLength: 6, description: Must include uppercase, lowercase, number, and special character }
  *               role: { type: string, enum: [admin, operator] }
  *               depotIds: { type: array, items: { type: string } }
+ *               sendEmail: { type: boolean, default: true, description: Send login details by email. Set false to skip email delivery. }
  *     responses:
- *       201: { description: Account created and credentials emailed }
+ *       201: { description: Account created; email delivery is optional and runs in the background }
  *       400: { description: Invalid request data }
- *       502: { description: Credentials email failed and account creation was rolled back }
+ *       503: { description: Email is enabled but required email settings are missing }
  */
 adminRouter.post('/', allowRoles('super_admin', 'admin'), asyncHandler(controller.create));
 /**
@@ -213,7 +214,7 @@ adminRouter.post('/', allowRoles('super_admin', 'admin'), asyncHandler(controlle
  *     summary: Edit a user account
  *     description: Admins can manage users within their depot access; superadmins can manage all users. Email and passwords cannot be changed through this endpoint.
  *     tags: [Administration]
- *     security: [{ bearerAuth: [] }]
+ *     security: [{ bearerAuth: [] }, { cookieAuth: [] }]
  *     parameters:
  *       - in: path
  *         name: id
@@ -234,6 +235,18 @@ adminRouter.post('/', allowRoles('super_admin', 'admin'), asyncHandler(controlle
  *     responses:
  *       200: { description: User updated }
  *       400: { description: Invalid request data }
+ *       403: { description: User is outside the caller's permissions }
+ *   delete:
+ *     summary: Delete a user account
+ *     tags: [Administration]
+ *     security: [{ bearerAuth: [] }, { cookieAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200: { description: User deleted }
  *       403: { description: User is outside the caller's permissions }
  */
 adminRouter.patch('/:id', allowRoles('super_admin', 'admin'), asyncHandler(controller.update));
