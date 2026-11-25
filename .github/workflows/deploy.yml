@@ -1,0 +1,61 @@
+
+name: Deploy Fleet Backend
+
+on:
+  push:
+    branches:
+      - Main
+
+  workflow_dispatch:
+
+concurrency:
+  group: fleet-backend-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to DigitalOcean
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup SSH
+        env:
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+          VM_HOST: ${{ secrets.VM_HOST }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+
+          printf '%s\n' "$VM_SSH_KEY" > ~/.ssh/fleet_deploy
+          chmod 600 ~/.ssh/fleet_deploy
+
+          ssh-keyscan -H "$VM_HOST" >> ~/.ssh/known_hosts
+
+      - name: Deploy backend
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_PORT: ${{ secrets.VM_PORT }}
+        run: |
+          ssh -i ~/.ssh/fleet_deploy \
+            -p "$VM_PORT" \
+            "$VM_USER@$VM_HOST" \
+            'bash -se' <<'EOF'
+              set -e
+
+              cd /var/www/Backend
+
+              git fetch origin Main
+              git reset --hard origin/Main
+
+              npm ci --omit=dev
+
+              sudo /usr/bin/pm2 restart fleet-api
+
+              sleep 3
+
+              sudo /usr/bin/pm2 status fleet-api
+          EOF
