@@ -4,7 +4,7 @@ name: Deploy Fleet Backend
 on:
   push:
     branches:
-      - main
+      - Main
 
   workflow_dispatch:
 
@@ -62,8 +62,9 @@ jobs:
               cd /var/www/Backend
 
               echo "Fetching latest backend code..."
-              git fetch origin main
-              git reset --hard origin/main
+              git remote set-url origin git@github.com:Developer-85/Fleet-Management_System-Electrie.git
+              git fetch origin Main
+              git reset --hard origin/Main
 
               echo "Installing production dependencies..."
               npm ci --omit=dev
