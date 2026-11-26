@@ -63,8 +63,8 @@ jobs:
 
               echo "Fetching latest backend code..."
               git remote set-url origin git@github.com:Developer-85/Fleet-Management_System-Electrie.git
-              git fetch origin Main
-              git reset --hard origin/Main
+              git fetch origin main
+              git reset --hard origin/main
 
               echo "Installing production dependencies..."
               npm ci --omit=dev
