@@ -61,14 +61,15 @@ jobs:
 
               cd /var/www/Backend
 
+              echo "Fetching latest backend code..."
               git fetch origin Main
               git reset --hard origin/Main
 
+              echo "Installing production dependencies..."
               npm ci --omit=dev
 
-              sudo /usr/bin/pm2 restart fleet-api
+              echo "Restarting backend..."
+              sudo -n /usr/bin/pm2 restart fleet-api
 
-              sleep 3
-
-              sudo /usr/bin/pm2 status fleet-api
+              echo "Backend deployment completed successfully."
           EOF
