@@ -31,6 +31,17 @@ app.use(express.urlencoded({ extended: true }));
 // API documentation
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
+// Root status endpoint
+app.get('/', (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: 'Backend API is running successfully!',
+    status: 'OK',
+    website: 'https://fleet.electrie.in',
+    documentation: 'https://fleet-api.electrie.in/docs',
+  });
+});
+
 // Routes
 app.use('/api', routes);
 
